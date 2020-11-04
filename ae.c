@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <errno.h>
 #include "ae.h"
 #include "ae_select.c"
 
@@ -42,4 +43,87 @@ err:
 		free(eventLoop);
 	}
 	return NULL;
+}
+
+/*
+ * 删除事件处理器
+ */
+void aeDeleteEventLoop(aeEventLoop *eventLoop) {
+	aeApiFree(eventLoop);
+	free(eventLoop->events);
+	free(eventLoop->fired);
+	free(eventLoop);
+}
+
+/*
+ * 停止事件处理器
+ */
+void aeStop(aeEventLoop *eventLoop) {
+	eventLoop->stop = 1;
+}
+
+/*
+ * 创建文件事件，根据 mask 参数的值，监听 fd 文件的状态，
+ * 当 fd 可用时，执行 proc 函数
+ */
+int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask, aeFileProc *proc, void *clientData) {
+	/* 判断 fd 是否超出范围 */
+	if (fd >= eventLoop->setsize) {
+		errno = ERANGE;
+		return AE_ERR;
+	}
+
+	/* 取出文件事件结构 */
+	aeFileEvent *fe = &eventLoop->events[fd];
+
+	/* 监听指定 fd 的指定事件 */
+	if (aeApiAddEvent(eventLoop, fd, mask) == -1)
+		return AE_ERR;
+
+	/* 设置文件事件类型，以及事件的处理器 */
+	fe->mask |= mask;
+	if (mask & AE_READABLE) fe->rfileProc = proc;
+	if (mask & AE_WRITABLE) fe->wfileproc = proc;
+
+	/* 设置私有数据 */
+	fe->clientData = clientData;
+
+	/* 如果 fd >= 当前最大的 fd，则将 fd 作为最大的 fd */
+	if (fd > eventLoop->maxfd)
+		eventLoop->maxfd = fd;
+
+	return AE_OK;
+}
+
+/*
+ * 删除文件事件
+ */
+void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask) {
+	/* 判断 fd 是否超出范围 */
+	if (fd >= eventLoop->setsize) return;
+
+	/* 取出文件事件结构 */
+	aeFileEvent *fe = &eventLoop->events[fd];
+
+	/* 如果未设置事件类型，直接返回 */
+	if (fe->mask == AE_NONE) return;
+
+	/* 如果要删除 AE_WRITABLE 需要将 AE_BARRIER 一起删除 */
+	if (mask & AE_WRITABLE) mask |= AE_BARRIER;
+
+	/* 取消对 fd 的事件监听 */
+	aeApiDelEvent(eventLoop, fd, mask);
+
+	/* 计算新掩码 */
+	fe->mask = fe->mask & (~mask);
+
+	/* 如果 fd 是最大的fd，且文件事件被完全删除时，
+	 * 重新找一个最大的 fd。*/
+	if (fd == eventLoop->maxfd && fe->mask == AE_NONE) {
+		int j;
+
+		for (j = eventLoop->maxfd-1; j > 0; j--)
+			if (eventLoop->events[j].mask != AE_NONE) break;
+		eventLoop->maxfd = j;
+	}
 }
