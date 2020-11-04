@@ -26,4 +26,8 @@ if (SELECT_EXISTS)
     add_definitions(-D HAVE_SELECT)
 endif()
 
+add_library(ae ae.c)
+
 add_executable(event-loop-for-redis main.c)
+
+target_link_libraries(event-loop-for-redis ae)

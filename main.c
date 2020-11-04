@@ -1,7 +1,7 @@
 #include <stdio.h>
-#include "ae_select.c"
+#include "ae.h"
 
 int main() {
-	printf("Hello, World! %s\n", aeApiName());
+	printf("Hello, World! %d\n", aeCreateEventLoop(10)->setsize);
 	return 0;
 }

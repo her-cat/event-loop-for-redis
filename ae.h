@@ -63,9 +63,9 @@ typedef struct aeEventLoop {
     int maxfd; /* 当前已注册最大的文件描述符。 */
     int setsize; /* 跟踪的最大的文件描述符数。*/
     long long timeEventNextId; /* 记录最大的时间事件id + 1。 */
-    time_t lastTime; /* 用于检测系统时钟偏差，处理时间回拨的情况。 */
+    time_t lastTime; /* 最后一次执行时间，用于检测系统时钟偏差，处理时间回拨的情况。 */
     aeFileEvent *events; /* 已注册的事件。 */
-    aeFiredEvent *fired; /* 被触发的事件。 */
+    aeFiredEvent *fired; /* 已就绪的事件。 */
     aeTimeEvent *timeEventHead; /* 时间事件表。 */
     int stop; /* 事件循环结束标识。 */
     void *apidata; /* 用于轮询API特定数据，不同的 I/O 多路复用技术有不同的数据结构。 */
