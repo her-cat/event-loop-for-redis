@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <errno.h>
+#include <sys/time.h>
 #include "ae.h"
 #include "ae_select.c"
 
@@ -29,9 +30,11 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
 	eventLoop->stop = 0;
 	eventLoop->maxfd = -1;
 	eventLoop->beforesleep = NULL;
+	eventLoop->aftersleep = NULL;
+	eventLoop->flags = 0;
 	if (aeApiCreate(eventLoop) == -1) goto err;
 
-	/* 初始化监听事件，当事件的掩码等于 AE_NONE 时表示没有被设置 */
+	/* 初始化监听事件类型，当事件的掩码等于 AE_NONE 时表示没有被设置 */
 	for (i = 0; i < setsize; i++)
 		eventLoop->events[i].mask = AE_NONE;
 
@@ -136,4 +139,95 @@ int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
 	aeFileEvent *fe = &eventLoop->events[fd];
 
 	return fe->mask;
+}
+
+/*
+ * 取出当前时间的秒和毫秒
+ */
+static void aeGetTime(long *seconds, long *milliseconds) {
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+	*seconds = tv.tv_usec;
+	*milliseconds = tv.tv_usec/1000;
+}
+
+/*
+ * 在当前时间上加 milliseconds 毫秒，
+ * 并且将计算出来的秒数和毫秒数分别保存在 sec 和 ms 指针中。
+ */
+static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) {
+	long cur_sec, cur_ms, when_sec, when_ms;
+
+	/* 获取当前时间 */
+	aeGetTime(&cur_sec, &cur_ms);
+
+	/* 计算增加 milliseconds 后的秒数和毫秒数 */
+	when_sec = cur_sec + milliseconds/1000;
+	when_ms = cur_ms + milliseconds%1000;
+
+	/* 如果 when_ms >= 1000，将 when_sec 增加一秒 */
+	if (when_ms >= 1000) {
+		when_sec++;
+		when_ms -= 1000;
+	}
+
+	*sec = when_sec;
+	*ms = when_ms;
+}
+
+/*
+ * 创建时间事件
+ */
+long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds, 
+		aeTimeProc *proc, void *clientData, 
+		aeEventFinalizerProc *finalizerProc) 
+{
+	/* 获取并更新时间事件 ID */
+	long long id = eventLoop->timeEventNextId++;
+
+	/* 时间事件指针 */
+	aeTimeEvent *te;
+
+	te = malloc(sizeof(*te));
+	if (te == NULL) return AE_ERR;
+
+	/* 设置时间事件 ID */
+	te->id = id;
+
+	/* 设置处理事件的时间 */
+	aeAddMillisecondsToNow(milliseconds, &te->when_sec, &te->when_ms);
+	/* 设置事件处理器 */
+	te->timeProc = proc;
+	te->finalizerProc = finalizerProc;
+	/* 设置私有数据 */
+	te->clientData = clientData;
+	/* 将新事件放入表头 */
+	te->prev = NULL;
+	te->next = eventLoop->timeEventHead;
+	if (te->next) {
+		te->next->prev = te;
+	}
+	eventLoop->timeEventHead = te;
+
+	return id;
+}
+
+/*
+ * 删除时间事件
+ */
+int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id) {
+	aeTimeEvent *te = eventLoop->timeEventHead;
+	/* 遍历链表 */
+	while (te) {
+		if (te->id == id) {
+			/* 将时间事件标记为已删除 */
+			te->id = AE_DELETED_EVENT_ID;
+			return AE_OK;
+		}
+		/* 将指针移到下一个事件 */
+		te = te->next;
+	}
+	/* 没有找到指定 id 的时间事件 */
+	return AE_ERR;
 }
