@@ -96,7 +96,7 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask, aeFileProc *proc
 }
 
 /*
- * 删除文件事件
+ * 将 fd 从 mask 指定的监听队列中删除
  */
 void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask) {
 	/* 判断 fd 是否超出范围 */
@@ -126,4 +126,14 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask) {
 			if (eventLoop->events[j].mask != AE_NONE) break;
 		eventLoop->maxfd = j;
 	}
+}
+
+/*
+ * 获取 fd 正在监听的事件类型
+ */
+int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
+	if (fd >= eventLoop->maxfd) return 0;
+	aeFileEvent *fe = &eventLoop->events[fd];
+
+	return fe->mask;
 }

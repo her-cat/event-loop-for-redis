@@ -78,5 +78,6 @@ aeEventLoop *aeCreateEventLoop(int setsize);
 void aeDeleteEventLoop(aeEventLoop *eventLoop);
 void aeStop(aeEventLoop *eventLoop);
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask, aeFileProc *proc, void *clientData);
+int aeGetFileEvents(aeEventLoop *eventLoop, int fd);
 
 #endif
