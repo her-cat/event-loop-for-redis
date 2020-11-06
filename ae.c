@@ -231,3 +231,22 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id) {
 	/* 没有找到指定 id 的时间事件 */
 	return AE_ERR;
 }
+
+/* 寻找离当前时间最近的时间事件，
+ * 此操作有助于了解 select 可以在不延迟任何事件的情况下休眠多少时间。
+ * Note: 因为链表是乱序的，所以查找复杂度为 O(N)
+ */
+static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop) {
+	aeTimeEvent *te = eventLoop->timeEventHead;
+	aeTimeEvent *nearest = NULL;
+
+	while (te) {
+		if (!nearest || te->when_sec < nearest->when_sec || 
+				(te->when_sec == nearest->when_sec && 
+				te->when_ms < nearest->when_ms))
+			nearest = te;
+		te = te->next;
+	}
+
+	return nearest;
+}
