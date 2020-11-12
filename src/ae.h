@@ -17,8 +17,8 @@
 #define AE_DONT_EVENTS 4 /* 没有事件 */
 #define AE_CALL_AFTER_SLEEP 8
 
-#define AE_NO_MORE -1 /* 没有更多数据 */
-#define AE_DELETED_EVENT_ID -1 /* 表示事件已删除 */
+#define AE_NOMORE -1 /* 表示时间事件不需要继续执行 */
+#define AE_DELETED_EVENT_ID -1 /* 表示时间事件待删除 */
 
 /* 宏定义 */
 #define AE_NOTUSED(v) ((void)v)

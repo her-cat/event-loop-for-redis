@@ -221,7 +221,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id) {
 	/* 遍历链表 */
 	while (te) {
 		if (te->id == id) {
-			/* 将时间事件标记为已删除 */
+			/* 将时间事件标记为待删除 */
 			te->id = AE_DELETED_EVENT_ID;
 			return AE_OK;
 		}
@@ -249,4 +249,90 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop) {
 	}
 
 	return nearest;
+}
+
+/* 
+ * 处理所有已到达的时间事件 
+ */
+static int processTimeEvents(aeEventLoop *eventLoop) {
+	int processed = 0;
+	aeTimeEvent *te;
+	long long maxId;
+	time_t now = time(NULL);
+
+	/* 如果事件循环最后运行时间 > 当前时间，
+	   说明当前时间被回拨到过去的时间点，需要通过重置事件执行时间，防止事件处理混乱。 */
+	if (now < eventLoop->lastTime) {
+		te = eventLoop->timeEventHead;
+		while (te) {
+			/* 将事件执行时间重置为 0，使事件稍后将被执行 */
+			te->when_sec = 0;
+			te = te->next;
+		}
+	}
+	/* 重置事件循环最后运行时间 */
+	eventLoop->lastTime = now;
+
+	te = eventLoop->timeEventHead;
+	maxId = eventLoop->timeEventNextId + 1;
+
+	while (te) {
+		long now_sec, now_ms;
+		long long id;
+
+		/* 删除被标记为待删除的事件 */
+		if (te->id == AE_DELETED_EVENT_ID) {
+			aeTimeEvent *next = te->next;
+			/* 断开 te 跟上一个事件的联系  */
+			if (te->prev)
+				/* 将 te 的前驱节点的后继节点指向 te 的后继节点 */
+				te->prev->next = te->next;
+			else
+				/* te->prev 为 NULL 表示 te 是第一个事件，直接将头节点指向 te->next 即可 */
+				eventLoop->timeEventHead = te->next;
+			/* 断开 te 跟下一个事件的联系 */
+			if (te->next)
+				/* 将 te 的后继节点的前驱节点指向 te 的前驱节点 */
+				te->next->prev = te->prev;
+			if (te->finalizerProc)
+				/* 执行事件清理函数 */
+				te->finalizerProc(eventLoop, te->clientData);
+			/* 释放时间事件 */
+			free(te);
+			te = next;
+			continue;
+		}
+
+		/* 跳过无效事件 */
+		if (te->id > maxId) {
+			te = te->next;
+			continue;
+		}
+
+		/* 获取当前的秒数和毫秒数 */
+		aeGetTime(&now_sec, &now_ms);
+		/* 当前秒数 > 事件的秒数 */
+		if (now_sec > te->when_sec || 
+				/* 当前秒数 == 事件秒数 且 当前毫秒数 >= 事件的毫秒数 */
+				(now_sec == te->when_sec && now_ms >= te->when_ms)) 
+		{
+			int retval;
+
+			id = te->id;
+			/* 执行事件回调函数，并获取返回值 */
+			retval = te->timeProc(eventLoop, id, te->clientData);
+			processed++;
+			/* 时间事件是否需要继续执行 */
+			if (retval != AE_NOMORE) {
+				/* retval 毫秒后继续执行这个事件 */
+				aeAddMillisecondsToNow(retval, &te->when_sec, &te->when_ms);
+			} else {
+				/* 如果不需要继续执行，则标记为待删除 */
+				te->id = AE_DELETED_EVENT_ID;
+			}
+		}
+		te = te->next;
+	}
+
+	return processed;
 }
