@@ -35,9 +35,9 @@ typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 /* 文件事件结构体 */
 typedef struct aeFileEvent {
     int mask; /* 事件掩码，one of AE_(READABLE|WRITABLE|BARRIER)。 */
-    aeFileProc *rfileProc; /* 可读事件回调函数，当事件可读时调用该函数。 */
-    aeFileProc *wfileproc; /* 可写事件回调函数，当事件可写时调用该函数。 */
-    void *clientData; /* 一般是指向 redisClient 的指针。 */
+    aeFileProc *rfileProc; /* 可读回调函数，当事件可读时调用该函数。 */
+    aeFileProc *wfileproc; /* 可写回调函数，当事件可写时调用该函数。 */
+    void *clientData; /* 多路复用库的私有数据，一般是指向 redisClient 的指针。 */
 } aeFileEvent;
 
 /* 时间事件结构体 */
@@ -47,12 +47,12 @@ typedef struct aeTimeEvent {
     long when_ms; /* 毫秒数 */
     aeTimeProc *timeProc; /* 时间事件回调函数，当时间事件被触发时调用该函数。 */
     aeEventFinalizerProc *finalizerProc; /* 时间事件清理函数，当删除时间事件的时候会被调用。 */
-    void *clientData; /* 一般是指向 redisClient 的指针。 */
+    void *clientData; /* 多路复用库的私有数据，一般是指向 redisClient 的指针。 */
     struct aeTimeEvent *prev; /* 上一个时间事件 */
     struct aeTimeEvent *next; /* 下一个时间事件 */
 } aeTimeEvent;
 
-/* 触发事件结构体 */
+/* 已就绪事件结构体 */
 typedef struct aeFiredEvent {
     int fd;
     int mask;
@@ -61,17 +61,17 @@ typedef struct aeFiredEvent {
 /* 事件循环结构体 */
 typedef struct aeEventLoop {
     int maxfd; /* 当前已注册最大的文件描述符。 */
-    int setsize; /* 跟踪的最大的文件描述符数。*/
-    long long timeEventNextId; /* 记录最大的时间事件id + 1。 */
-    time_t lastTime; /* 最后一次执行时间，用于检测系统时钟偏差，处理时间回拨的情况。 */
-    aeFileEvent *events; /* 已注册的事件。 */
-    aeFiredEvent *fired; /* 已就绪的事件。 */
-    aeTimeEvent *timeEventHead; /* 时间事件表。 */
+    int setsize; /* 目前已追踪的最大描述符。 */
+    long long timeEventNextId; /* 用于生成时间事件 id。 */
+    time_t lastTime; /* 最后一次运行时间，用于检测系统时钟偏差，处理时间回拨的情况。 */
+    aeFileEvent *events; /* 已注册的文件事件。 */
+    aeFiredEvent *fired; /* 已就绪的文件事件。 */
+    aeTimeEvent *timeEventHead; /* 时间事件链表头节点。 */
     int stop; /* 事件循环结束标识。 */
-    void *apidata; /* 用于轮询API特定数据，不同的 I/O 多路复用技术有不同的数据结构。 */
+    void *apidata; /* 用于存储轮询API特定的数据，不同的 I/O 多路复用技术有不同的数据结构。 */
     aeBeforeSleepProc *beforesleep; /* 进入轮询API前需要执行的操作 */
     aeBeforeSleepProc *aftersleep; /* 轮询API结束后需要执行的操作 */
-    int flags; /* 事件循环状态标志 */
+    int flags; /* 事件循环状态 flags */
 } aeEventLoop;
 
 /* 函数原型 */
