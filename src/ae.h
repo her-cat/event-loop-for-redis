@@ -14,7 +14,7 @@
 #define AE_FILE_EVENTS 1 /* 文件事件 */
 #define AE_TIME_EVENTS 2 /* 时间事件 */
 #define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS) /* 所有事件 */
-#define AE_DONT_EVENTS 4 /* 没有事件 */
+#define AE_DONT_WAIT 4 /* 不阻塞，也不进行等待 */
 #define AE_CALL_AFTER_SLEEP 8
 
 #define AE_NOMORE -1 /* 表示时间事件不需要继续执行 */
