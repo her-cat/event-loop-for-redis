@@ -17,7 +17,7 @@ int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 
-	printf("id: %lld, now: %ld %d, time proc executed.\n", id, tv.tv_sec, tv.tv_usec/1000);
+	printf("id: %lld, now: %ld %d, time proc executed.\n", id, tv.tv_sec, (int)tv.tv_usec/1000);
 
 	return 10 * 1000;
 }
