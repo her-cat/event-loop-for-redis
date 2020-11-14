@@ -148,7 +148,7 @@ static void aeGetTime(long *seconds, long *milliseconds) {
 	struct timeval tv;
 
 	gettimeofday(&tv, NULL);
-	*seconds = tv.tv_usec;
+	*seconds = tv.tv_sec;
 	*milliseconds = tv.tv_usec/1000;
 }
 
@@ -334,5 +334,129 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 		te = te->next;
 	}
 
+	return processed;
+}
+
+int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
+	int processed = 0, numevents;
+
+	/* 没有需要处理的事件，尽快返回 */
+	if (!(flags & AE_TIME_EVENTS) && !(flags & AE_FILE_EVENTS)) return 0;
+
+	/* 如果已经注册了文件事件，或者需要处理时间事件且没有设置 AE_DONT_WAIT 时，
+	 * 我们需要获取下一个时间事件执行时间，以便于在下一个时间事件准备好触发之前休眠。*/
+	if (eventLoop->maxfd != -1 ||
+		((flags & AE_TIME_EVENTS) && !(flags & AE_DONT_WAIT))) {
+		int j;
+		aeTimeEvent *shortest = NULL;
+		struct timeval tv, *tvp;
+
+		/* 如果处理时间事件，需要将进程阻塞进行休眠，所以设置了 AE_DONT_WAIT 就不能处理时间事件了。*/
+		if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
+			/* 获取最近的时间事件 */
+			shortest = aeSearchNearestTimer(eventLoop);
+
+		if (shortest) {
+			/* 如果存在时间事件，
+			 * 根据最近可执行时间事件的执行时间和现在的事件计算出来的时间差，来决定文件事件阻塞时间。*/
+			long now_sec, now_ms;
+
+			aeGetTime(&now_sec, &now_ms);
+			tvp = &tv;
+
+			/* 计算出需要等待多少毫秒才能触发下一个时间事件 */
+			long long ms = (shortest->when_sec - now_sec) * 1000 + shortest->when_ms - now_ms;
+
+			if (ms > 0) {
+				tvp->tv_sec = ms / 1000;
+				tvp->tv_usec = (ms % 1000) * 1000;
+			} else {
+				tvp->tv_sec = 0;
+				tvp->tv_usec = 0;
+			}
+		} else {
+			/* 执行到了这一步，说明没有时间事件。 */
+			/* 如果设置了 AE_DONT_WAIT 需要尽快返回。 */
+			if (flags & AE_DONT_WAIT) {
+				/* 将超时时间设置为 0，表示非阻塞，不管有没有文件事件到达都立即返回。 */
+				tv.tv_sec = tv.tv_usec = 0;
+				tvp = &tv;
+			} else {
+				/* 其他情况可以一直阻塞，直到有文件事件到达。 */
+				tvp = NULL;
+			}
+		}
+
+		/* 调用多路复用API，将仅在超时或某些事件激发时返回，超时时间由 tvp 决定。
+		 * tvp 为 NULL：表示如果没有 I/O 事件发生，则一直等待下去。
+		 * tvp->tv_sec 或 tvp->tv_usec 为 0：表示阻塞指定的时间。
+		 * tvp->tv_sec 且 tvp->tv_usec 为 0：表示不等待，检测完立即返回。 */
+		numevents = aeApiPoll(eventLoop, tvp);
+
+		/* 如果设置了回调函数且 flags 设置了 AE_CALL_AFTER_SLEEP */
+		if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
+			/* 执行休眠后的回调函数 */
+			eventLoop->aftersleep(eventLoop);
+
+		/* 处理已就绪的文件事件 */
+		for (j = 0; j < numevents; j++) {
+			aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
+			int mask = eventLoop->fired[j].mask;
+			int fd = eventLoop->fired[j].fd;
+			int fired = 0; /* 用来表示该 fd 是否被处理过 */
+
+			/*
+			 * 通常我们先执行可读事件，然后再执行可写事件。
+			 * 因为有时我们可以在处理查询之后立即提供查询的答复。
+			 *
+			 * 但是，如果在掩码中设置了AE_BARRIER，
+			 * 我们的应用程序会要求我们做相反的操作：在readable之后永远不要触发可写事件。
+			 * 在这种情况下，我们反转调用。
+			 * 例如，当我们想在 beforeSleep() 钩子中执行某些操作时，这非常有用，比如在回复客户端之前将文件同步到磁盘。*/
+			int invert = fe->mask & AE_BARRIER;
+
+			/*
+			 * 注意“fe->mask & mask & ...”代码：可能一个已经处理的事件删除了一个已就绪的元素，
+			 * 而我们仍然没有处理，所以我们检查事件是否仍然有效。
+			 *
+			 * 如果调用顺序没有颠倒，则处理可读事件。*/
+			if (!invert && fe->mask & mask & AE_READABLE) {
+				fe->rfileProc(eventLoop, fd, fe->clientData, mask);
+				/* fired 确保读/写事件只能执行其中一个。 */
+				fired++;
+				/* 重新获取已就绪文件事件，因为调用 rfileProc 处理可读事件时，可能改变了文件事件的状态。 */
+				fe = &eventLoop->events[fd];
+			}
+
+			/* 如果事件类型为可写，处理可写事件。 */
+			if (fe->mask & mask & AE_WRITABLE) {
+				/* 文件事件没有被处理过或读/写事件不是同一个回调函数。 */
+				if (!fired || fe->rfileProc != fe->wfileproc) {
+					fe->wfileproc(eventLoop, fd, fe->clientData, mask);
+					fired++;
+				}
+			}
+
+			/* 如果调用顺序被颠倒了。 */
+			if (invert) {
+				fe = &eventLoop->events[fd];
+				/* 如果事件类型为可读， */
+				if ((fe->mask & mask & AE_READABLE) &&
+					/* 并且文件事件没有被处理过或读/写事件不是同一个回调函数。 */
+					(!fired || fe->rfileProc != fe->wfileproc)) {
+					fe->rfileProc(eventLoop, fd, fe->clientData, mask);
+					fired++;
+				}
+			}
+			/* 已处理事件数量+1 */
+			processed++;
+		}
+	}
+
+	/* 检查时间事件。 */
+	if (flags & AE_TIME_EVENTS)
+		processed += processTimeEvents(eventLoop);
+
+	/* 返回已处理的文件/时间事件数。*/
 	return processed;
 }

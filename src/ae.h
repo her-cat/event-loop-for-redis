@@ -15,7 +15,7 @@
 #define AE_TIME_EVENTS 2 /* 时间事件 */
 #define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS) /* 所有事件 */
 #define AE_DONT_WAIT 4 /* 不阻塞，也不进行等待 */
-#define AE_CALL_AFTER_SLEEP 8
+#define AE_CALL_AFTER_SLEEP 8 /* 表示是否执行休眠后的回调函数 */
 
 #define AE_NOMORE -1 /* 表示时间事件不需要继续执行 */
 #define AE_DELETED_EVENT_ID -1 /* 表示时间事件待删除 */
@@ -85,4 +85,5 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeTimeProc *proc, void *clientData, 
         aeEventFinalizerProc *finalizerProc);
 int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id);
+int aeProcessEvents(aeEventLoop *eventLoop, int flags);
 #endif
