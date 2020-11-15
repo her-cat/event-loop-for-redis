@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <poll.h>
 #include "ae.h"
 #include "ae_select.c"
 
@@ -474,4 +475,27 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
 
 	/* 返回已处理的文件/时间事件数。*/
 	return processed;
+}
+
+/* 等待指定 milliseconds 毫秒数直到给定的 fd 变成可读、可写或异常。 */
+int aeWait(int fd, int mask, long long milliseconds) {
+	struct pollfd pfd;
+	int retmask = 0, retval;
+
+	/* 初始化 pfd 结构。 */
+	memset(&pfd, 0, sizeof(pfd));
+	pfd.fd = fd;
+	/* 设置需要监听的事件类型 */
+	if (mask & AE_READABLE) pfd.events |= POLLIN;
+	if (mask & AE_WRITABLE) pfd.events |= POLLOUT;
+
+	if ((retval = poll(&pfd, 1, milliseconds)) == 1) {
+		if (pfd.revents & POLLIN) retmask |= AE_READABLE;
+		if (pfd.revents & POLLOUT) retmask |= AE_WRITABLE;
+		if (pfd.revents & POLLERR) retmask |= AE_WRITABLE;
+		if (pfd.revents & POLLHUP) retmask |= AE_WRITABLE;
+		return retmask;
+	} else {
+		return retval;
+	}
 }

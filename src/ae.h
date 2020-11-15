@@ -86,4 +86,5 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeEventFinalizerProc *finalizerProc);
 int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id);
 int aeProcessEvents(aeEventLoop *eventLoop, int flags);
+int aeWait(int fd, int mask, long long milliseconds);
 #endif
