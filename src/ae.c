@@ -337,6 +337,21 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 	return processed;
 }
 
+/**
+ * 处理所有已到达的时间事件，以及所有已就绪的事件。
+ *
+ * 如果不传入特殊的 flags 的话，那么函数睡眠直到文件事件就绪，
+ * 或者下一个时间事件到达（如果有的话）。
+ *
+ * 如果 flags 为 0，那么函数什么都不做，直接返回。
+ * 如果 flags 包含 AE_ALL_EVENTS，所有类型的事件都会被处理。
+ * 如果 flags 包含 AE_FILE_EVENTS，那么会处理文件事件。
+ * 如果 flags 包含 AE_TIME_EVENTS，那么会处理时间事件。
+ * 如果 flags 包含 AE_DONT_WAIT，那么函数会在处理完所有不许阻塞事件之后，立即返回。
+ * 如果 flags 包含 AE_CALL_AFTER_SLEEP，那么会在休眠后调用 aftersleep 回调函数。
+ *
+ * 函数的返回值为已处理事件的数量。
+ */
 int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
 	int processed = 0, numevents;
 
