@@ -221,7 +221,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id) {
 	/* 遍历链表 */
 	while (te) {
 		if (te->id == id) {
-			/* 将时间事件标记为待删除 */
+			/* 将时间事件标记为已删除 */
 			te->id = AE_DELETED_EVENT_ID;
 			return AE_OK;
 		}
@@ -280,7 +280,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 		long now_sec, now_ms;
 		long long id;
 
-		/* 删除被标记为待删除的事件 */
+		/* 清理被标记为已删除的事件 */
 		if (te->id == AE_DELETED_EVENT_ID) {
 			aeTimeEvent *next = te->next;
 			/* 断开 te 跟上一个事件的联系  */
@@ -327,7 +327,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 				/* retval 毫秒后继续执行这个事件 */
 				aeAddMillisecondsToNow(retval, &te->when_sec, &te->when_ms);
 			} else {
-				/* 如果不需要继续执行，则标记为待删除 */
+				/* 如果不需要继续执行，则标记为已删除 */
 				te->id = AE_DELETED_EVENT_ID;
 			}
 		}
