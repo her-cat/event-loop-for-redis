@@ -512,10 +512,77 @@ void aeMain(aeEventLoop *eventLoop) {
 	eventLoop->stop = 0;
 
 	while (!eventLoop->stop) {
-		/* 执行睡眠前的回调函数。 */
+		/* 执行处理事件前的回调函数。 */
 		if (eventLoop->beforesleep)
 			eventLoop->beforesleep(eventLoop);
 		/* 开始处理事件。 */
 		aeProcessEvents(eventLoop, AE_ALL_EVENTS);
 	}
+}
+
+/*
+ * 返回所使用的多路复用库的名称。
+ */
+char *aeGetApiName(void) {
+	return aeApiName();
+}
+
+/*
+ * 设置处理事件前需要被执行的函数。
+ */
+void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep) {
+	eventLoop->beforesleep = beforesleep;
+}
+
+/*
+ * 设置处理事件后需要被执行的函数。
+ */
+void aeSetAfterSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *aftersleep) {
+	eventLoop->aftersleep = aftersleep;
+}
+
+/*
+ * 返回当前事件槽大小。
+ */
+int aeGetSetSize(aeEventLoop *eventLoop) {
+	return eventLoop->setsize;
+}
+
+/*
+ * 调整事件槽的大小。
+ *
+ * 如果尝试设置大小为 setsize，但是已经存在 >= setsize 的文件描述符，
+ * 那么返回 AE_ERR，不做任何动作。
+ *
+ * 否则，执行大小调整操作，并返回 AE_Ok。
+ */
+int aeResizeSetSize(aeEventLoop *eventLoop, int setsize) {
+	int i;
+
+	if (setsize == eventLoop->setsize) return AE_OK;
+	if (eventLoop->maxfd >= setsize) return AE_ERR;
+	if (aeApiResize(eventLoop, setsize) == -1) return AE_ERR;
+
+	/* 重新调整已分配的内存块大小。 */
+	eventLoop->events = realloc(eventLoop->events, sizeof(aeFileEvent) * setsize);
+	eventLoop->fired = realloc(eventLoop->fired, sizeof(aeFileEvent) * setsize);
+	eventLoop->setsize = setsize;
+
+	/* 确保新创建的槽的掩码都被初始化为 AE_NONE。 */
+	for (i = eventLoop->maxfd + 1; i < setsize; i++)
+		eventLoop->events[i].mask = AE_NONE;
+
+	return AE_OK;
+}
+
+/*
+ * 通知事件处理的下一次迭代将超时设置为 0。
+ */
+void aeSetDontWait(aeEventLoop *eventLoop, int noWait) {
+	if (noWait)
+		/* 添加 AE_DONT_WAIT 标志。 */
+		eventLoop->flags |= AE_DONT_WAIT;
+	else
+		/* 删除 AE_DONT_WAIT 标志，先取反，再位与。 */
+		eventLoop->flags &= ~AE_DONT_WAIT;
 }
