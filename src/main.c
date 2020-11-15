@@ -27,7 +27,6 @@ void finalizerProc(aeEventLoop *eventLoop, void *clientData) {
 }
 
 int main() {
-	int processed;
 	aeEventLoop *eventLoop;
 
 	eventLoop = aeCreateEventLoop(10);
@@ -37,9 +36,7 @@ int main() {
 	aeCreateTimeEvent(eventLoop, 10 * 1000, timeProc, NULL, finalizerProc);
 	aeCreateTimeEvent(eventLoop, 5 * 1000, timeProc, NULL, finalizerProc);
 
-	while (!eventLoop->stop) {
-		processed = aeProcessEvents(eventLoop, AE_ALL_EVENTS);
+	aeMain(eventLoop);
 
-		printf("processed: %d\n", processed);
-	}
+	return 0;
 }

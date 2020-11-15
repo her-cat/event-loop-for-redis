@@ -233,7 +233,8 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id) {
 	return AE_ERR;
 }
 
-/* 寻找离当前时间最近的时间事件，
+/*
+ * 寻找离当前时间最近的时间事件，
  * 此操作有助于了解 select 可以在不延迟任何事件的情况下休眠多少时间。
  * Note: 因为链表是乱序的，所以查找复杂度为 O(N)
  */
@@ -338,7 +339,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 	return processed;
 }
 
-/**
+/*
  * 处理所有已到达的时间事件，以及所有已就绪的事件。
  *
  * 如果不传入特殊的 flags 的话，那么函数睡眠直到文件事件就绪，
@@ -477,7 +478,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
 	return processed;
 }
 
-/* 等待指定 milliseconds 毫秒数直到给定的 fd 变成可读、可写或异常。 */
+/*
+ * 等待指定 milliseconds 毫秒数，
+ * 直到给定的 fd 变成可读、可写或异常。
+ */
 int aeWait(int fd, int mask, long long milliseconds) {
 	struct pollfd pfd;
 	int retmask = 0, retval;
@@ -497,5 +501,21 @@ int aeWait(int fd, int mask, long long milliseconds) {
 		return retmask;
 	} else {
 		return retval;
+	}
+}
+
+/*
+ * 事件循环主入口。
+ */
+void aeMain(aeEventLoop *eventLoop) {
+	/* 重置事件循环停止状态 */
+	eventLoop->stop = 0;
+
+	while (!eventLoop->stop) {
+		/* 执行睡眠前的回调函数。 */
+		if (eventLoop->beforesleep)
+			eventLoop->beforesleep(eventLoop);
+		/* 开始处理事件。 */
+		aeProcessEvents(eventLoop, AE_ALL_EVENTS);
 	}
 }
