@@ -2,8 +2,14 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <poll.h>
+#include <string.h>
 #include "ae.h"
+
+#ifdef HAVE_EPOLL
+#include "ae_epoll.c"
+#else
 #include "ae_select.c"
+#endif
 
 /*
  * 初始化事件处理器状态

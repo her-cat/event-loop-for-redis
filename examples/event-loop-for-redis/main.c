@@ -25,6 +25,8 @@ int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
 int main() {
 	aeEventLoop *eventLoop;
 
+	printf("used %s \n", aeGetApiName());
+
 	eventLoop = aeCreateEventLoop(10);
 
 	aeCreateFileEvent(eventLoop, STDIN_FILENO, AE_READABLE, fileProc, NULL);
