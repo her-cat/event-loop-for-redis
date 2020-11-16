@@ -3,6 +3,7 @@ project(event-loop-for-redis C)
 
 set(CMAKE_C_STANDARD 99)
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
@@ -28,4 +29,6 @@ endif()
 
 file(GLOB SOURCES "src/*.c")
 
-add_executable(event-loop-for-redis ${SOURCES})
+add_library(ae ${SOURCES})
+
+add_subdirectory(examples/event-loop-for-redis)

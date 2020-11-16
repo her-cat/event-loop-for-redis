@@ -2,7 +2,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
-#include "ae.h"
+#include "../../src/ae.h"
 
 void fileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
 	char buf[4096];
