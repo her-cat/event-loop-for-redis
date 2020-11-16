@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <poll.h>
 #include "ae.h"
 #include "ae_select.c"
 
@@ -221,7 +222,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id) {
 	/* 遍历链表 */
 	while (te) {
 		if (te->id == id) {
-			/* 将时间事件标记为待删除 */
+			/* 将时间事件标记为已删除 */
 			te->id = AE_DELETED_EVENT_ID;
 			return AE_OK;
 		}
@@ -232,7 +233,8 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id) {
 	return AE_ERR;
 }
 
-/* 寻找离当前时间最近的时间事件，
+/*
+ * 寻找离当前时间最近的时间事件，
  * 此操作有助于了解 select 可以在不延迟任何事件的情况下休眠多少时间。
  * Note: 因为链表是乱序的，所以查找复杂度为 O(N)
  */
@@ -280,7 +282,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 		long now_sec, now_ms;
 		long long id;
 
-		/* 删除被标记为待删除的事件 */
+		/* 清理被标记为已删除的事件 */
 		if (te->id == AE_DELETED_EVENT_ID) {
 			aeTimeEvent *next = te->next;
 			/* 断开 te 跟上一个事件的联系  */
@@ -327,7 +329,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 				/* retval 毫秒后继续执行这个事件 */
 				aeAddMillisecondsToNow(retval, &te->when_sec, &te->when_ms);
 			} else {
-				/* 如果不需要继续执行，则标记为待删除 */
+				/* 如果不需要继续执行，则标记为已删除 */
 				te->id = AE_DELETED_EVENT_ID;
 			}
 		}
@@ -337,6 +339,21 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 	return processed;
 }
 
+/*
+ * 处理所有已到达的时间事件，以及所有已就绪的事件。
+ *
+ * 如果不传入特殊的 flags 的话，那么函数睡眠直到文件事件就绪，
+ * 或者下一个时间事件到达（如果有的话）。
+ *
+ * 如果 flags 为 0，那么函数什么都不做，直接返回。
+ * 如果 flags 包含 AE_ALL_EVENTS，所有类型的事件都会被处理。
+ * 如果 flags 包含 AE_FILE_EVENTS，那么会处理文件事件。
+ * 如果 flags 包含 AE_TIME_EVENTS，那么会处理时间事件。
+ * 如果 flags 包含 AE_DONT_WAIT，那么函数会在处理完所有不许阻塞事件之后，立即返回。
+ * 如果 flags 包含 AE_CALL_AFTER_SLEEP，那么会在休眠后调用 aftersleep 回调函数。
+ *
+ * 函数的返回值为已处理事件的数量。
+ */
 int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
 	int processed = 0, numevents;
 
@@ -459,4 +476,113 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
 
 	/* 返回已处理的文件/时间事件数。*/
 	return processed;
+}
+
+/*
+ * 等待指定 milliseconds 毫秒数，
+ * 直到给定的 fd 变成可读、可写或异常。
+ */
+int aeWait(int fd, int mask, long long milliseconds) {
+	struct pollfd pfd;
+	int retmask = 0, retval;
+
+	/* 初始化 pfd 结构。 */
+	memset(&pfd, 0, sizeof(pfd));
+	pfd.fd = fd;
+	/* 设置需要监听的事件类型 */
+	if (mask & AE_READABLE) pfd.events |= POLLIN;
+	if (mask & AE_WRITABLE) pfd.events |= POLLOUT;
+
+	if ((retval = poll(&pfd, 1, milliseconds)) == 1) {
+		if (pfd.revents & POLLIN) retmask |= AE_READABLE;
+		if (pfd.revents & POLLOUT) retmask |= AE_WRITABLE;
+		if (pfd.revents & POLLERR) retmask |= AE_WRITABLE;
+		if (pfd.revents & POLLHUP) retmask |= AE_WRITABLE;
+		return retmask;
+	} else {
+		return retval;
+	}
+}
+
+/*
+ * 事件循环主入口。
+ */
+void aeMain(aeEventLoop *eventLoop) {
+	/* 重置事件循环停止状态 */
+	eventLoop->stop = 0;
+
+	while (!eventLoop->stop) {
+		/* 执行处理事件前的回调函数。 */
+		if (eventLoop->beforesleep)
+			eventLoop->beforesleep(eventLoop);
+		/* 开始处理事件。 */
+		aeProcessEvents(eventLoop, AE_ALL_EVENTS);
+	}
+}
+
+/*
+ * 返回所使用的多路复用库的名称。
+ */
+char *aeGetApiName(void) {
+	return aeApiName();
+}
+
+/*
+ * 设置处理事件前需要被执行的函数。
+ */
+void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep) {
+	eventLoop->beforesleep = beforesleep;
+}
+
+/*
+ * 设置处理事件后需要被执行的函数。
+ */
+void aeSetAfterSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *aftersleep) {
+	eventLoop->aftersleep = aftersleep;
+}
+
+/*
+ * 返回当前事件槽大小。
+ */
+int aeGetSetSize(aeEventLoop *eventLoop) {
+	return eventLoop->setsize;
+}
+
+/*
+ * 调整事件槽的大小。
+ *
+ * 如果尝试设置大小为 setsize，但是已经存在 >= setsize 的文件描述符，
+ * 那么返回 AE_ERR，不做任何动作。
+ *
+ * 否则，执行大小调整操作，并返回 AE_Ok。
+ */
+int aeResizeSetSize(aeEventLoop *eventLoop, int setsize) {
+	int i;
+
+	if (setsize == eventLoop->setsize) return AE_OK;
+	if (eventLoop->maxfd >= setsize) return AE_ERR;
+	if (aeApiResize(eventLoop, setsize) == -1) return AE_ERR;
+
+	/* 重新调整已分配的内存块大小。 */
+	eventLoop->events = realloc(eventLoop->events, sizeof(aeFileEvent) * setsize);
+	eventLoop->fired = realloc(eventLoop->fired, sizeof(aeFileEvent) * setsize);
+	eventLoop->setsize = setsize;
+
+	/* 确保新创建的槽的掩码都被初始化为 AE_NONE。 */
+	for (i = eventLoop->maxfd + 1; i < setsize; i++)
+		eventLoop->events[i].mask = AE_NONE;
+
+	return AE_OK;
+}
+
+/*
+ * 通知事件处理的下一次迭代将超时设置为 0。
+ */
+void aeSetDontWait(aeEventLoop *eventLoop, int noWait) {
+	if (noWait)
+		/* 添加 AE_DONT_WAIT 标志。 */
+		eventLoop->flags |= AE_DONT_WAIT;
+	else
+		/* 删除 AE_DONT_WAIT 标志，先取反，再位与。 */
+		eventLoop->flags &= ~AE_DONT_WAIT;
 }

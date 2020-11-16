@@ -22,24 +22,17 @@ int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
 	return 10 * 1000;
 }
 
-void finalizerProc(aeEventLoop *eventLoop, void *clientData) {
-	printf("finalizer proc executed.\n");
-}
-
 int main() {
-	int processed;
 	aeEventLoop *eventLoop;
 
 	eventLoop = aeCreateEventLoop(10);
 
 	aeCreateFileEvent(eventLoop, STDIN_FILENO, AE_READABLE, fileProc, NULL);
 
-	aeCreateTimeEvent(eventLoop, 10 * 1000, timeProc, NULL, finalizerProc);
-	aeCreateTimeEvent(eventLoop, 5 * 1000, timeProc, NULL, finalizerProc);
+	aeCreateTimeEvent(eventLoop, 10 * 1000, timeProc, NULL, NULL);
+	aeCreateTimeEvent(eventLoop, 5 * 1000, timeProc, NULL, NULL);
 
-	while (!eventLoop->stop) {
-		processed = aeProcessEvents(eventLoop, AE_ALL_EVENTS);
+	aeMain(eventLoop);
 
-		printf("processed: %d\n", processed);
-	}
+	return 0;
 }
