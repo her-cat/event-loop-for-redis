@@ -27,8 +27,7 @@ if (SELECT_EXISTS)
     add_definitions(-D HAVE_SELECT)
 endif()
 
-file(GLOB SOURCES "src/*.c")
 
-add_library(ae ${SOURCES})
-
+add_subdirectory(src)
 add_subdirectory(examples/event-loop-for-redis)
+add_subdirectory(examples/simple-http-server)
