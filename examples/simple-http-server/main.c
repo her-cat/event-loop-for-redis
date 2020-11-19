@@ -9,10 +9,6 @@
 #define ERR -1
 #define BACKLOG 128
 
-struct httpRequest {
-
-} httpRequest;
-
 int createWebServer(int port, int backlog) {
     int fd, on = 1;
     struct sockaddr_in server_addr;
@@ -44,9 +40,10 @@ int createWebServer(int port, int backlog) {
     return fd;
 }
 
-void sendResponseToClient(aeEventLoop *eventLoop, int fd, char *content, unsigned long len) {
-    aeDeleteFileEvent(eventLoop, fd, AE_ALL_EVENTS);
-    write(fd, content, len);
+void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
+    aeDeleteFileEvent(eventLoop, fd, (AE_READABLE|AE_WRITABLE));
+    char *message = "HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nHi";
+    int n = write(fd, message, strlen(message));
     close(fd);
 }
 
@@ -60,9 +57,7 @@ void readRequestFromClient(aeEventLoop *eventLoop, int fd, void *clientData, int
 
     printf("read: %s\n", buf);
 
-    char *message = "HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nHi";
-
-    sendResponseToClient(eventLoop, fd, message, strlen(message));
+    aeCreateFileEvent(eventLoop, fd, AE_WRITABLE, sendResponseToClient, NULL);
 }
 
 void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
@@ -72,7 +67,7 @@ void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask
 
     cfd = accept(fd, (struct sockaddr *) &sa, &salen);
 
-    readRequestFromClient(eventLoop, cfd, clientData, mask);
+    aeCreateFileEvent(eventLoop, cfd, AE_READABLE, readRequestFromClient, NULL);
 }
 
 int main() {
