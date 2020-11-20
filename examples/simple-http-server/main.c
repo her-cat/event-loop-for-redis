@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "../../src/ae/ae.h"
+#include "connection.h"
 
 #define ERR -1
 #define BACKLOG 128
@@ -41,33 +42,38 @@ int createWebServer(int port, int backlog) {
 }
 
 void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
+    connection *conn = (connection *)clientData;
+
     aeDeleteFileEvent(eventLoop, fd, (AE_READABLE|AE_WRITABLE));
-    char *message = "HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nHi";
-    int n = write(fd, message, strlen(message));
+    char buf[conn->recvBytes+40];
+
+    memset(buf, 0, strlen(buf));
+    sprintf(buf, "HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", conn->recvBytes, conn->recvBuffer);
+    int n = write(fd, buf, strlen(buf));
     close(fd);
 }
 
-void readRequestFromClient(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
-    char buf[4096];
+void parseRequest(aeEventLoop *eventLoop, int fd, connection *conn) {
 
-    bzero(&buf, sizeof(buf));
+    /* TODO: 解析 http 协议头 */
+    printf("parseRequest[%d]:\n%s\n", fd, conn->recvBuffer);
 
-    if (read(fd, buf, 4096) > 0)
-        buf[strlen(buf)-1] = '\0';
-
-    printf("read: %s\n", buf);
-
-    aeCreateFileEvent(eventLoop, fd, AE_WRITABLE, sendResponseToClient, NULL);
+    aeCreateFileEvent(eventLoop, fd, AE_WRITABLE, sendResponseToClient, conn);
 }
 
 void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
     int cfd;
     struct sockaddr_storage sa;
     socklen_t salen = sizeof(sa);
+    connection *conn;
 
     cfd = accept(fd, (struct sockaddr *) &sa, &salen);
 
-    aeCreateFileEvent(eventLoop, cfd, AE_READABLE, readRequestFromClient, NULL);
+    conn = connCreate(cfd);
+
+    conn->onMessage = parseRequest;
+
+    aeCreateFileEvent(eventLoop, cfd, AE_READABLE, connRead, conn);
 }
 
 int main() {
