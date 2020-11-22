@@ -8,19 +8,19 @@ int httpCheck(connection *conn, char *buffer) {
 	char method[8];
 
 	/* 没有 \r\n\r\n 说明 header 不完整 */
-	if ((crlfPos = strpos(conn->recvBuffer, "\r\n\r\n")) < 0) {
+	if ((crlfPos = strpos(buffer, "\r\n\r\n")) < 0) {
 		printf("need more header data\n");
 		return 0;
 	}
 
 	headerLen = crlfPos + 4;
-	firstSpacePos = strpos(conn->recvBuffer, " ");
+	firstSpacePos = strpos(buffer, " ");
 	if (firstSpacePos <= 0) {
 		connClose(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", CONN_SEND_RAW);
 		return 0;
 	}
 
-	strncpy(method, conn->recvBuffer, firstSpacePos);
+	strncpy(method, buffer, firstSpacePos);
 
 	if (strncasecmp("GET", method, 3) == 0 ||
 		strncasecmp("HEAD", method, 4) == 0 ||
@@ -38,5 +38,5 @@ int httpCheck(connection *conn, char *buffer) {
 
 	printf("method:%s, len:%ld\n", method, strlen(method));
 
-	return 0;
+	return headerLen;
 }
