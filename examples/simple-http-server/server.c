@@ -45,17 +45,17 @@ int createWebServer(int port, int backlog) {
 void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
 	connection *conn = (connection *)clientData;
 
-	aeDeleteFileEvent(eventLoop, fd, (AE_READABLE|AE_WRITABLE));
-	char buf[conn->recvBytes+40];
+	char buf[strlen(conn->sendBuffer)+40];
+    memset(buf, 0, strlen(buf));
+	sprintf(buf, "HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(conn->sendBuffer), conn->sendBuffer);
 
-	memset(buf, 0, strlen(buf));
-	sprintf(buf, "HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", conn->recvBytes, conn->recvBuffer);
-	int n = write(fd, buf, strlen(buf));
-	close(fd);
+	connSend(conn, buf, CONN_SEND_RAW);
+    connDestroy(conn);
 }
 
 void parseRequest(connection *conn, char *buffer) {
 	/* TODO: 解析 http 协议头 */
+    strcpy(conn->sendBuffer, buffer);
 	printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
 
 	aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE, sendResponseToClient, conn);

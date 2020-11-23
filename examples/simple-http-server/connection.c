@@ -45,6 +45,7 @@ void connSend(connection *conn, char *buffer, int raw) {
 	if (len == strlen(buffer)) {
 		/* 数据全部发出去了。 */
 		conn->sendBytes += len;
+        memset(conn->sendBuffer, 0, sizeof(conn->sendBuffer));
 		return;
 	} else if (len > 0) {
 		/* 只发出去了部分数据。 */
