@@ -15,7 +15,6 @@ connection *connCreate(int fd) {
     conn->fd = fd;
     conn->sendBytes = 0;
     conn->recvBytes = 0;
-    conn->sendBytes = 0;
     conn->currentPackageLen = 0;
 	conn->status = CONN_ESTABLISHED;
     memset(conn->sendBuffer, 0, sizeof(conn->sendBuffer));
@@ -44,16 +43,16 @@ void connSend(connection *conn, char *buffer, int raw) {
 
 	len = write(conn->fd, buffer, strlen(buffer));
 	if (len == strlen(buffer)) {
-		/* 数据全部发出去了 */
+		/* 数据全部发出去了。 */
 		conn->sendBytes += len;
 		return;
 	} else if (len > 0) {
-		/* 只发出去了部分数据 */
-		strncpy(conn->sendBuffer, buffer, len);
+		/* 只发出去了部分数据。 */
+		strcpy(conn->sendBuffer, buffer + len);
 		conn->sendBytes += len;
 	} else {
-		/* 发送失败（客户端已关闭？） */
-		if (errno == EPIPE) {
+		/* 发送失败，客户端可能已关闭 */
+		if (len == 0 || errno == EPIPE) {
 			connDestroy(conn);
 			return;
 		}
@@ -72,7 +71,7 @@ void connRead(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
     if (ret <= 0) {
         /* EINTR: 表示操作被中断，可以继续读取。
          * EAGAIN/EWOULDBLOCK: 表示接收缓冲区现在没有数据，过会再重试。 */
-        if (ret == EINTR || ret == EAGAIN)
+        if (errno == EINTR || errno == EAGAIN)
             return;
         /* 发生错误，客户端可能已关闭。 */
 		connDestroy(conn);
@@ -142,7 +141,7 @@ void connWrite(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
 		conn->sendBytes += len;
 		strcpy(conn->sendBuffer, conn->sendBuffer + len);
 		return;
-	} else if (len == EINTR || len == EAGAIN) {
+	} else if (errno == EINTR || errno == EAGAIN) {
         /* EINTR: 表示操作被中断，可以继续发送。
          * EAGAIN/EWOULDBLOCK: 表示发送缓冲区没有空间，过会再重试。 */
         return;

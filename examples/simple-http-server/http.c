@@ -7,8 +7,8 @@ int httpCheck(connection *conn, char *buffer) {
 	int crlfPos, headerLen, firstSpacePos;
 	char method[8];
 
-	/* 没有 \r\n\r\n 说明 header 不完整 */
-	if ((crlfPos = strpos(buffer, "\r\n\r\n")) < 0) {
+	/* 没有 \r\n\r\n 说明 header 不完整。 */
+	if ((crlfPos = strpos(buffer, HTTP_CRLF_CRLF)) < 0) {
 		printf("need more header data\n");
 		return 0;
 	}
