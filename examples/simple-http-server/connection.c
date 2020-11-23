@@ -69,10 +69,13 @@ void connRead(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
     connection *conn = (connection *) clientData;
 
     ret = read(fd, buf, CONN_READ_BUFFER_SIZE);
-    if (ret < 0) {
+    if (ret <= 0) {
+        /* EINTR: 表示操作被中断，可以继续读取。
+         * EAGAIN/EWOULDBLOCK: 表示接收缓冲区现在没有数据，过会再重试。 */
+        if (ret == EINTR || ret == EAGAIN)
+            return;
+        /* 发生错误，客户端可能已关闭。 */
 		connDestroy(conn);
-        return;
-    } else if (ret == EINTR || ret == EAGAIN) {
         return;
     }
 
@@ -80,21 +83,43 @@ void connRead(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
     strncat(conn->recvBuffer, buf, ret);
 	printf("[%d]recved:%d\n", conn->fd, ret);
 
-	if (strlen(conn->recvBuffer) == 0) {
-		return;
-	}
+	while (strlen(conn->recvBuffer) > 0) {
+	    if (conn->currentPackageLen > 0) {
+	        if (conn->currentPackageLen > strlen(conn->recvBuffer)) {
+                break;
+	        }
+	    } else {
+            conn->currentPackageLen = httpCheck(conn, conn->recvBuffer);
+            if (conn->currentPackageLen == 0) {
+                break;
+            } else if (conn->currentPackageLen > 0 && conn->currentPackageLen <= 1048576) {
+                if (conn->currentPackageLen > strlen(conn->recvBuffer)) {
+                    break;;
+                }
+            } else {
+                /* 错误的数据包。 */
+                perror("Error package");
+                connDestroy(conn);
+                return;
+            }
+	    }
 
-	conn->currentPackageLen = httpCheck(conn, conn->recvBuffer);
-	if (conn->currentPackageLen <= 0) {
-		return;
+	    /* 从缓冲区中获取完整的包。 */
+	    char *oneRequestBuffer = malloc(sizeof(char) * conn->currentPackageLen);
+        strncpy(oneRequestBuffer, conn->recvBuffer, conn->currentPackageLen);
+        /* 如果包的长度等于缓冲区的长度，说明是一个完整的包，直接清空 recvBuffer。
+         * 否则从 recvBuffer 中移除当前包的数据。 */
+	    if (conn->currentPackageLen == strlen(conn->recvBuffer)) {
+            memset(conn->recvBuffer, 0, sizeof(conn->recvBuffer));
+	    } else {
+            strcpy(conn->recvBuffer, conn->recvBuffer + conn->currentPackageLen);
+	    }
+	    /* 重置当前包长度为 0。*/
+	    conn->currentPackageLen = 0;
+	    if (conn->onMessage == NULL)
+            continue;;
+        conn->onMessage(conn, oneRequestBuffer);
 	}
-
-	if (conn->onMessage == NULL) {
-		memset(conn->recvBuffer, 0, sizeof(conn->recvBuffer));
-		return;
-	}
-
-    conn->onMessage(conn);
 }
 
 void connWrite(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
@@ -104,7 +129,7 @@ void connWrite(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
 	len = write(fd, conn->sendBuffer, strlen(conn->sendBuffer));
 	if (len == strlen(conn->sendBuffer)) {
 		conn->sendBytes += len;
-		/* 全部数据发完了，删除可写事件 */
+		/* 数据全部被发送出去，删除可写事件。 */
 		aeDeleteFileEvent(server.el, fd, AE_WRITABLE);
 		memset(conn->sendBuffer, 0, sizeof(conn->sendBuffer));
 		/* TODO: 通知 sendBuffer 有空闲 */
@@ -113,12 +138,16 @@ void connWrite(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
 		}
 		return;
 	} else if (len > 0) {
-		/* 发送了部分数据 */
+		/* 只发送了部分数据。 */
 		conn->sendBytes += len;
-		strncpy(conn->sendBuffer, conn->sendBuffer, len);
+		strcpy(conn->sendBuffer, conn->sendBuffer + len);
 		return;
+	} else if (len == EINTR || len == EAGAIN) {
+        /* EINTR: 表示操作被中断，可以继续发送。
+         * EAGAIN/EWOULDBLOCK: 表示发送缓冲区没有空间，过会再重试。 */
+        return;
 	}
-	/* 发送失败，客户端可能已断开 */
+	/* 发送失败，客户端可能已关闭。 */
 	connDestroy(conn);
 }
 
@@ -126,9 +155,7 @@ void connClose(connection *conn, char *data, int raw) {
 	if (conn->status == CONN_CONNECTING) {
 		connDestroy(conn);
 		return;
-	}
-
-	if (conn->status == CONN_CLOSING || conn->status == CONN_CLOSED) {
+	} else if (conn->status == CONN_CLOSING || conn->status == CONN_CLOSED) {
 		return;
 	}
 
@@ -148,10 +175,6 @@ void connClose(connection *conn, char *data, int raw) {
 }
 
 void connDestroy(connection *conn) {
-	if (conn->status == CONN_CLOSED) {
-		return;
-	}
-
 	/* 删除可读、可写事件 */
 	aeDeleteFileEvent(server.el, conn->fd, (AE_READABLE|AE_WRITABLE));
 

@@ -54,9 +54,9 @@ void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int 
 	close(fd);
 }
 
-void parseRequest(connection *conn) {
+void parseRequest(connection *conn, char *buffer) {
 	/* TODO: 解析 http 协议头 */
-	printf("parseRequest[%d]:\n%s\n", conn->fd, conn->recvBuffer);
+	printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
 
 	aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE, sendResponseToClient, conn);
 }
