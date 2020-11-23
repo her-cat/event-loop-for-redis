@@ -21,6 +21,8 @@ connection *connCreate(int fd) {
     memset(conn->sendBuffer, 0, sizeof(conn->sendBuffer));
     memset(conn->recvBuffer, 0, sizeof(conn->recvBuffer));
 
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+
     return conn;
 }
 

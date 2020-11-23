@@ -61,7 +61,7 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     struct epoll_event ee = {0}; /* 避免 valgrind 警告。 */
 
     /* 如果 fd 没有关联任何事件，那么这是一个 ADD 操作，
-     * 如果 fd 关联了某个/某些事件，那么这时一个 MOD 操作。 */
+     * 如果 fd 关联了某个/某些事件，那么这是一个 MOD 操作。 */
      int op = eventLoop->events[fd].mask == AE_NONE ?
         EPOLL_CTL_ADD : EPOLL_CTL_MOD;
 
