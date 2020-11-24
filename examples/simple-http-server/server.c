@@ -112,6 +112,7 @@ void initServerConfig(void) {
 	server.port = 8080;
 	server.tcp_backlog = 128;
 	server.configfile = NULL;
+	server.document_root = NULL;
 	server.el = NULL;
 }
 

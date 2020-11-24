@@ -28,6 +28,8 @@ void loadServerConfig(const char *filename) {
             server.port = atoi(delimiterPos + 1);
         } else if (strncasecmp("tcp_backlog", buffer, 11) == 0) {
             server.tcp_backlog = atoi(delimiterPos + 1);
+        } else if (strncasecmp("document_root", buffer, 13) == 0) {
+            server.document_root = delimiterPos + 1;
         }
     }
 }
