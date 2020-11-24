@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <signal.h>
 #include "../../src/ae/ae.h"
 #include "connection.h"
 #include "server.h"
@@ -89,6 +90,9 @@ void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask
 }
 
 void initServer(void) {
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
+
 	server.pid = getpid();
 	server.port = 8080;
 	server.tcp_backlog = 128;
