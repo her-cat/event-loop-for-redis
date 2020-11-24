@@ -81,7 +81,7 @@ void connRead(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
 
     conn->recvBytes += ret;
     strncat(conn->recvBuffer, buf, ret);
-	printf("[%d]recved:%d\n", conn->fd, ret);
+//	printf("[%d]recved:%d\n", conn->fd, ret);
 
 	while (strlen(conn->recvBuffer) > 0) {
 	    if (conn->currentPackageLen > 0) {

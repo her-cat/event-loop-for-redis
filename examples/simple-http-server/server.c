@@ -12,8 +12,11 @@
 #include "connection.h"
 #include "server.h"
 #include "config.h"
+#include "blocking_queue.h"
 
 struct httpServer server;
+
+static blocking_queue queue;
 
 static const struct option commandOptions[] = {
     {"help", no_argument, NULL, '?'},
@@ -76,7 +79,7 @@ void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int 
 void parseRequest(connection *conn, char *buffer) {
 	/* TODO: 解析 http 协议头 */
     strcpy(conn->sendBuffer, buffer);
-	printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
+//	printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
 
 	aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE, sendResponseToClient, conn);
 }
@@ -85,7 +88,6 @@ void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask
 	int cfd, ret, on = 1;
 	struct sockaddr_storage sa;
 	socklen_t salen = sizeof(sa);
-	connection *conn;
 
 	cfd = accept(fd, (struct sockaddr *) &sa, &salen);
 	if (cfd <= 0) {
@@ -93,21 +95,8 @@ void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask
 		return;
 	}
 
-    setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-
-	if ((conn = connCreate(cfd)) == NULL) {
-		perror("create connection failed");
-		return;
-	}
-
-	conn->onMessage = parseRequest;
-	conn->clientAddr = inet_ntoa((((struct sockaddr_in *)&sa))->sin_addr);
-	conn->clientPort = ntohs((((struct sockaddr_in *)&sa))->sin_port);
-
-	ret = aeCreateFileEvent(eventLoop, cfd, AE_READABLE, connRead, conn);
-	if (ret == AE_ERR) {
-		perror("create read file event failed");
-	}
+    printf("client connected: %d \n", cfd);
+    blocking_queue_push(&queue, cfd);
 }
 
 void initServerConfig(void) {
@@ -160,8 +149,52 @@ void initServer(void) {
     }
 }
 
+void *thread_run(void *arg) {
+    int fd, ret, on = 1;
+    pthread_t tid;
+    connection *conn;
+    aeEventLoop *eventLoop;
+
+    tid = pthread_self();
+    eventLoop = aeCreateEventLoop(1024);
+
+    /* 分离当前线程，在线程终止后能够自动回收相关的线程资源 */
+    pthread_detach(tid);
+
+    eventLoop->stop = 0;
+
+    while (!eventLoop->stop) {
+        if ((fd = blocking_queue_pop(&queue)) > 0) {
+            setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+            if ((conn = connCreate(fd)) == NULL) {
+                perror("create connection failed");
+                continue;
+            }
+
+            conn->onMessage = parseRequest;
+
+            ret = aeCreateFileEvent(eventLoop, fd, AE_READABLE, connRead, conn);
+            if (ret == AE_ERR) {
+                perror("create read file event failed");
+            }
+
+            printf("[tid:%ld] service to fd: %d \n", tid, fd);
+        }
+        /* 开始处理事件。 */
+        aeProcessEvents(eventLoop, AE_FILE_EVENTS | AE_DONT_WAIT);
+    }
+}
+
 
 int main(int argc, char *argv[]) {
+    pthread_t tid;
+
+    blocking_queue_init(&queue, BLOCKING_QUEUE_SIZE);
+
+    for (int i = 0; i < 10; i++) {
+        pthread_create(&tid, NULL, thread_run, NULL);
+    }
+
     initServerConfig();
 
     parseCommand(argc, argv);
