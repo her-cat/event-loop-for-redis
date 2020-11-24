@@ -1,4 +1,5 @@
 #include <string.h>
+#include <ctype.h>
 
 int strpos(const char *haystack, const char *needle) {
     if (strlen(needle) == 0) return 0;
@@ -13,4 +14,21 @@ int strpos(const char *haystack, const char *needle) {
     }
 
     return -1;
+}
+
+void ltrim(char *s) {
+    char *p = s;
+    while (isspace(*p)) *p++;
+    strcpy(s, p);
+}
+
+void rtrim(char *s) {
+    int i = strlen(s) - 1;
+    while (i >= 0 && isspace(s[i])) i--;
+    s[i + 1] = '\0';
+}
+
+void trim(char *s) {
+    ltrim(s);
+    rtrim(s);
 }

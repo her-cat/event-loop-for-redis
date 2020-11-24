@@ -6,11 +6,28 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <getopt.h>
 #include "../../src/ae/ae.h"
 #include "connection.h"
 #include "server.h"
+#include "config.h"
 
 struct httpServer server;
+
+static const struct option commandOptions[] = {
+    {"help", no_argument, NULL, '?'},
+    {"version", no_argument, NULL, 'v'},
+    {"conf", required_argument, NULL, 'c'},
+};
+
+static void usage() {
+    fprintf(stderr,
+            "simple-http-server [option]... \n"
+            "  -c|--conf <config file>  Specify config file.\n"
+            "  -?|-h|--help             Display help information.\n"
+            "  -v|--version             Display server version.\n"
+    );
+}
 
 int createWebServer(int port, int backlog) {
 	int fd, on = 1;
@@ -89,27 +106,61 @@ void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask
 	}
 }
 
+void initServerConfig(void) {
+	server.pid = getpid();
+	server.fd = 0;
+	server.port = 8080;
+	server.tcp_backlog = 128;
+	server.configfile = NULL;
+	server.el = NULL;
+}
+
+void parseCommand(int argc, char *argv[]) {
+    int opt, index = 0;
+
+    while ((opt = getopt_long(argc, argv, "vc:?h", commandOptions, &index)) >= 0) {
+        switch (opt) {
+            case 'v':
+                printf("Server Version: %.1f\n", SERVER_VERSION);
+                exit(0);
+            case 'c':
+                server.configfile = strdup(optarg);
+                break;
+            case '?':
+            case 'h':
+            default:
+                usage();
+                exit(0);
+        }
+    }
+}
+
 void initServer(void) {
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
 
-	server.pid = getpid();
-	server.port = 8080;
-	server.tcp_backlog = 128;
-	server.el = aeCreateEventLoop(1024);
-	if (server.el == NULL) {
-		perror("create the event loop failed");
-		exit(1);
-	}
+    if (server.configfile != NULL) {
+        loadServerConfig(server.configfile);
+    }
 
-	server.fd = createWebServer(server.port, server.tcp_backlog);
-	if (server.fd == SERVER_ERR) {
-		exit(1);
-	}
+    server.el = aeCreateEventLoop(1024);
+    if (server.el == NULL) {
+        perror("create the event loop failed");
+        exit(1);
+    }
+
+    server.fd = createWebServer(server.port, server.tcp_backlog);
+    if (server.fd == SERVER_ERR) {
+        exit(1);
+    }
 }
 
 
-int main() {
+int main(int argc, char *argv[]) {
+    initServerConfig();
+
+    parseCommand(argc, argv);
+
 	initServer();
 
 	aeCreateFileEvent(server.el, server.fd, AE_READABLE, acceptTcpHandler, NULL);
