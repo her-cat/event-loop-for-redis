@@ -1,4 +1,5 @@
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -44,6 +45,7 @@ int createWebServer(int port, int backlog) {
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
 	fcntl(fd, F_SETFL, O_NONBLOCK);
 
@@ -80,7 +82,7 @@ void parseRequest(connection *conn, char *buffer) {
 }
 
 void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
-	int cfd, ret;
+	int cfd, ret, on = 1;
 	struct sockaddr_storage sa;
 	socklen_t salen = sizeof(sa);
 	connection *conn;
@@ -90,6 +92,8 @@ void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask
 		perror("accept failed");
 		return;
 	}
+
+    setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
 	if ((conn = connCreate(cfd)) == NULL) {
 		perror("create connection failed");
