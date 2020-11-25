@@ -54,7 +54,7 @@ void connSend(connection *conn, char *buffer, int raw) {
     if (len == strlen(buffer)) {
         /* 数据全部发出去了。 */
         conn->sendBytes += len;
-        memset(conn->sendBuffer, 0, sizeof(conn->sendBuffer));
+        memset(conn->sendBuffer, 0, strlen(conn->sendBuffer));
         return;
     } else if (len > 0) {
         /* 只发出去了部分数据。 */
@@ -119,7 +119,7 @@ void connRead(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
         /* 如果包的长度等于缓冲区的长度，说明是一个完整的包，直接清空 recvBuffer。
          * 否则从 recvBuffer 中移除当前包的数据。 */
         if (conn->currentPackageLen == strlen(conn->recvBuffer)) {
-            memset(conn->recvBuffer, 0, sizeof(conn->recvBuffer));
+            memset(conn->recvBuffer, 0, strlen(conn->recvBuffer));
         } else {
             strcpy(conn->recvBuffer, conn->recvBuffer + conn->currentPackageLen);
         }
@@ -140,7 +140,7 @@ void connWrite(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
         conn->sendBytes += len;
         /* 数据全部被发送出去，删除可写事件。 */
         aeDeleteFileEvent(server.el, fd, AE_WRITABLE);
-        memset(conn->sendBuffer, 0, sizeof(conn->sendBuffer));
+        memset(conn->sendBuffer, 0, strlen(conn->sendBuffer));
         /* TODO: 通知 sendBuffer 有空闲 */
         if (conn->status == CONN_CLOSING) {
             connDestroy(conn);
