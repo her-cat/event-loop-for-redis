@@ -1,11 +1,11 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "http.h"
 #include "until.h"
 
 int httpCheck(connection *conn, char *buffer) {
-    char method[8], *pos, *newline;
-    int crlfPos, headerLen, firstSpacePos, bodyLen, ok;
+    int crlfPos, headerLen, bodyLen;
 
     /* 没有 \r\n\r\n 说明 header 不完整。 */
     if ((crlfPos = strpos(buffer, HTTP_CRLF_CRLF)) < 0) {
@@ -14,36 +14,50 @@ int httpCheck(connection *conn, char *buffer) {
     }
 
     headerLen = crlfPos + 4;
-    firstSpacePos = strpos(buffer, " ");
-    if (firstSpacePos <= 0) {
-        connClose(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", CONN_SEND_RAW);
-        return 0;
-    }
 
-    strncpy(method, buffer, firstSpacePos);
-
-    if (strncasecmp("GET", method, 3) == 0 ||
-        strncasecmp("HEAD", method, 4) == 0 ||
-        strncasecmp("DELETE", method, 6) == 0 ||
-        strncasecmp("OPTIONS", method, 7) == 0) {
+    if (strncasecmp("GET", buffer, 3) == 0 ||
+        strncasecmp("HEAD", buffer, 4) == 0 ||
+        strncasecmp("DELETE", buffer, 6) == 0 ||
+        strncasecmp("OPTIONS", buffer, 7) == 0) {
         /* 不需要解析 body 的请求方式 */
         return headerLen;
-    } else if (strncasecmp("POST", method, 4) != 0 && strncasecmp("PUT", method, 3) != 0) {
+    } else if (strncasecmp("POST", buffer, 4) != 0 && strncasecmp("PUT", buffer, 3) != 0) {
         /* 未知的请求方式 */
         connClose(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", CONN_SEND_RAW);
         return 0;
     }
 
-    pos = strstr(buffer, "Content-Length: ");
-    newline = strchr(pos, '\r');
-
-    if (pos != NULL && newline != NULL) {
-        pos += 16;
-        if (str2int(pos, newline - pos, &bodyLen)) {
-            return headerLen + bodyLen;
-        }
+    if (httpGetContentLength(buffer, headerLen, &bodyLen)) {
+        return headerLen + bodyLen;
     }
-    /* Body 长度获取失败。*/
+
     connClose(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", CONN_SEND_RAW);
     return 0;
+}
+
+int httpGetContentLength(char *buffer, int headerLen, int *length) {
+    int ret;
+    char *pos, *newline, *header;
+
+    header = malloc(sizeof(char) * headerLen);
+    if (header == NULL) {
+        return 0;
+    }
+
+    strncpy(header, buffer, headerLen);
+    if ((pos = strstr(header, "\r\nContent-Length: ")) == NULL) {
+        free(header);
+        return 0;
+    }
+
+    pos += 18;
+    if ((newline = strchr(pos, '\r')) == NULL) {
+        free(header);
+        return 0;
+    }
+
+    ret = str2int(pos, newline - pos, length);
+
+    free(header);
+    return ret;
 }
