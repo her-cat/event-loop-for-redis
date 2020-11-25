@@ -5,7 +5,9 @@
 
 #define CONN_SEND_RAW 1
 #define CONN_SEND_NOT_RAW 0
-#define CONN_READ_BUFFER_SIZE 4096
+#define CONN_READ_BUFFER_SIZE 1024
+#define CONN_SEND_BUFFER_SIZE 4096
+#define CONN_RECV_BUFFER_SIZE CONN_SEND_BUFFER_SIZE
 
 enum CONN_STATUS {
     CONN_INITIAL = 0,
@@ -22,8 +24,8 @@ struct connection {
     int status;
     int recvBytes;
     int sendBytes;
-    char sendBuffer[1024];
-    char recvBuffer[1024];
+    char *sendBuffer;
+    char *recvBuffer;
     int currentPackageLen;
     char *clientAddr;
     int clientPort;

@@ -12,13 +12,22 @@ connection *connCreate(int fd) {
     connection *conn = malloc(sizeof(connection));
     if (conn == NULL) return NULL;
 
+    conn->sendBuffer = malloc(sizeof(char) * CONN_SEND_BUFFER_SIZE);
+    conn->recvBuffer = malloc(sizeof(char) * CONN_RECV_BUFFER_SIZE);
+    if (conn->sendBuffer == NULL || conn->recvBuffer == NULL) {
+        free(conn->sendBuffer);
+        free(conn->recvBuffer);
+        free(conn);
+        return NULL;
+    }
+
     conn->fd = fd;
     conn->sendBytes = 0;
     conn->recvBytes = 0;
     conn->currentPackageLen = 0;
     conn->status = CONN_ESTABLISHED;
-    memset(conn->sendBuffer, 0, sizeof(conn->sendBuffer));
-    memset(conn->recvBuffer, 0, sizeof(conn->recvBuffer));
+    memset(conn->sendBuffer, 0, strlen(conn->sendBuffer));
+    memset(conn->recvBuffer, 0, strlen(conn->recvBuffer));
 
     fcntl(fd, F_SETFL, O_NONBLOCK);
 
@@ -92,13 +101,13 @@ void connRead(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
             conn->currentPackageLen = httpCheck(conn, conn->recvBuffer);
             if (conn->currentPackageLen == 0) {
                 break;
-            } else if (conn->currentPackageLen > 0 && conn->currentPackageLen <= 1048576) {
+            } else if (conn->currentPackageLen > 0 && conn->currentPackageLen <= 104857) {
                 if (conn->currentPackageLen > strlen(conn->recvBuffer)) {
-                    break;;
+                    break;
                 }
             } else {
                 /* 错误的数据包。 */
-                perror("Error package");
+                printf("Error package\n");
                 connDestroy(conn);
                 return;
             }
