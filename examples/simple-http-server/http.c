@@ -4,8 +4,8 @@
 #include "until.h"
 
 int httpCheck(connection *conn, char *buffer) {
-    int crlfPos, headerLen, firstSpacePos;
-    char method[8];
+    char method[8], *pos, *newline;
+    int crlfPos, headerLen, firstSpacePos, bodyLen, ok;
 
     /* 没有 \r\n\r\n 说明 header 不完整。 */
     if ((crlfPos = strpos(buffer, HTTP_CRLF_CRLF)) < 0) {
@@ -34,9 +34,16 @@ int httpCheck(connection *conn, char *buffer) {
         return 0;
     }
 
-    /* TODO: 解析body */
+    pos = strstr(buffer, "Content-Length: ");
+    newline = strchr(pos, '\r');
 
-    printf("method:%s, len:%ld\n", method, strlen(method));
-
-    return headerLen;
+    if (pos != NULL && newline != NULL) {
+        pos += 16;
+        if (str2int(pos, newline - pos, &bodyLen)) {
+            return headerLen + bodyLen;
+        }
+    }
+    /* Body 长度获取失败。*/
+    connClose(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", CONN_SEND_RAW);
+    return 0;
 }

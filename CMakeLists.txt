@@ -7,7 +7,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
-set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} "-g -O2 -pthread -DNDEBUG")
+set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} "-g -O0 -pthread -DNDEBUG")
 
 # check epoll and add config.h for the macro compilation.
 include(CheckSymbolExists)
