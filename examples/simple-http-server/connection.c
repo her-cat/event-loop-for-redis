@@ -188,5 +188,7 @@ void connDestroy(connection *conn) {
     aeDeleteFileEvent(server.el, conn->fd, (AE_READABLE|AE_WRITABLE));
 
     close(conn->fd);
+    free(conn->sendBuffer);
+    free(conn->recvBuffer);
     free(conn);
 }

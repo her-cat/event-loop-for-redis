@@ -10,12 +10,13 @@ typedef struct request {
     /* first line properties. */
     char *uri;
     char *path;
-    char *method;
+    char method[8];
     float protocol_version;
 
-    /* use double linked list to store headers. */
+    /* TODO: use double linked list to store headers. */
 } request;
 
 request *reqCreate(connection *conn, char *buffer);
+int reqParseFirstLine(request *req, char *buffer);
 
 #endif

@@ -13,6 +13,7 @@
 #include "server.h"
 #include "config.h"
 #include "until.h"
+#include "request.h"
 
 struct httpServer server;
 
@@ -75,7 +76,15 @@ void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int 
 }
 
 void parseRequest(connection *conn, char *buffer) {
-    /* TODO: 解析 http 协议头 */
+    request *req;
+
+    req = reqCreate(conn, buffer);
+    if (req == NULL) {
+        perror("create request failed");
+        connClose(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n", CONN_SEND_RAW);
+        return;
+    }
+
     strcpy(conn->sendBuffer, buffer);
     printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
 
