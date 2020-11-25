@@ -8,11 +8,11 @@
 #define CONN_READ_BUFFER_SIZE 4096
 
 enum CONN_STATUS {
-	CONN_INITIAL = 0,
-	CONN_CONNECTING,
-	CONN_ESTABLISHED,
-	CONN_CLOSING,
-	CONN_CLOSED
+    CONN_INITIAL = 0,
+    CONN_CONNECTING,
+    CONN_ESTABLISHED,
+    CONN_CLOSING,
+    CONN_CLOSED
 };
 
 typedef struct connection connection;
@@ -21,8 +21,8 @@ struct connection {
     int fd;
     int status;
     int recvBytes;
-	int sendBytes;
-	char sendBuffer[1024];
+    int sendBytes;
+    char sendBuffer[1024];
     char recvBuffer[1024];
     int currentPackageLen;
     char *clientAddr;

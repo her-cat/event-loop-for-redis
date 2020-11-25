@@ -5,36 +5,36 @@
 #include "../../src/ae/ae.h"
 
 void fileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
-	char buf[4096];
+    char buf[4096];
 
-	if (fgets(buf, 4096, stdin) != NULL)
-		buf[strlen(buf)-1] = '\0';
+    if (fgets(buf, 4096, stdin) != NULL)
+        buf[strlen(buf)-1] = '\0';
 
-	printf("input: %s, file proc executed.\n", buf);
+    printf("input: %s, file proc executed.\n", buf);
 }
 
 int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
 
-	printf("id: %lld, now: %ld %d, time proc executed.\n", id, tv.tv_sec, (int)tv.tv_usec/1000);
+    printf("id: %lld, now: %ld %d, time proc executed.\n", id, tv.tv_sec, (int)tv.tv_usec/1000);
 
-	return 10 * 1000;
+    return 10 * 1000;
 }
 
 int main() {
-	aeEventLoop *eventLoop;
+    aeEventLoop *eventLoop;
 
-	printf("used %s \n", aeGetApiName());
+    printf("used %s \n", aeGetApiName());
 
-	eventLoop = aeCreateEventLoop(10);
+    eventLoop = aeCreateEventLoop(10);
 
-	aeCreateFileEvent(eventLoop, STDIN_FILENO, AE_READABLE, fileProc, NULL);
+    aeCreateFileEvent(eventLoop, STDIN_FILENO, AE_READABLE, fileProc, NULL);
 
-	aeCreateTimeEvent(eventLoop, 10 * 1000, timeProc, NULL, NULL);
-	aeCreateTimeEvent(eventLoop, 5 * 1000, timeProc, NULL, NULL);
+    aeCreateTimeEvent(eventLoop, 10 * 1000, timeProc, NULL, NULL);
+    aeCreateTimeEvent(eventLoop, 5 * 1000, timeProc, NULL, NULL);
 
-	aeMain(eventLoop);
+    aeMain(eventLoop);
 
-	return 0;
+    return 0;
 }

@@ -31,93 +31,93 @@ static void usage() {
 }
 
 int createWebServer(int port, int backlog) {
-	int fd, on = 1;
-	struct sockaddr_in server_addr;
+    int fd, on = 1;
+    struct sockaddr_in server_addr;
 
-	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-		perror("create server socket failed");
-		return SERVER_ERR;
-	}
+    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("create server socket failed");
+        return SERVER_ERR;
+    }
 
-	bzero(&server_addr, sizeof(server_addr));
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(port);
-	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bzero(&server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
-	fcntl(fd, F_SETFL, O_NONBLOCK);
+    fcntl(fd, F_SETFL, O_NONBLOCK);
 
-	if (bind(fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-		perror("bind server socket failed");
-		return SERVER_ERR;
-	}
+    if (bind(fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+        perror("bind server socket failed");
+        return SERVER_ERR;
+    }
 
-	if (listen(fd, backlog) < 0) {
-		perror("listen server socket failed");
-		return SERVER_ERR;
-	}
+    if (listen(fd, backlog) < 0) {
+        perror("listen server socket failed");
+        return SERVER_ERR;
+    }
 
-	return fd;
+    return fd;
 }
 
 void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
-	connection *conn = (connection *)clientData;
+    connection *conn = (connection *)clientData;
 
-	char buf[strlen(conn->sendBuffer)+40];
+    char buf[strlen(conn->sendBuffer)+40];
     memset(buf, 0, strlen(buf));
-	sprintf(buf, "HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(conn->sendBuffer), conn->sendBuffer);
+    sprintf(buf, "HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(conn->sendBuffer), conn->sendBuffer);
 
-	connSend(conn, buf, CONN_SEND_RAW);
+    connSend(conn, buf, CONN_SEND_RAW);
     connDestroy(conn);
 }
 
 void parseRequest(connection *conn, char *buffer) {
-	/* TODO: 解析 http 协议头 */
+    /* TODO: 解析 http 协议头 */
     strcpy(conn->sendBuffer, buffer);
-	printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
+    printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
 
-	aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE, sendResponseToClient, conn);
+    aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE, sendResponseToClient, conn);
 }
 
 void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
-	int cfd, ret, on = 1;
-	struct sockaddr_storage sa;
-	socklen_t salen = sizeof(sa);
-	connection *conn;
+    int cfd, ret, on = 1;
+    struct sockaddr_storage sa;
+    socklen_t salen = sizeof(sa);
+    connection *conn;
 
-	cfd = accept(fd, (struct sockaddr *) &sa, &salen);
-	if (cfd <= 0) {
-		perror("accept failed");
-		return;
-	}
+    cfd = accept(fd, (struct sockaddr *) &sa, &salen);
+    if (cfd <= 0) {
+        perror("accept failed");
+        return;
+    }
 
     setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
-	if ((conn = connCreate(cfd)) == NULL) {
-		perror("create connection failed");
-		return;
-	}
+    if ((conn = connCreate(cfd)) == NULL) {
+        perror("create connection failed");
+        return;
+    }
 
-	conn->onMessage = parseRequest;
-	conn->clientAddr = inet_ntoa((((struct sockaddr_in *)&sa))->sin_addr);
-	conn->clientPort = ntohs((((struct sockaddr_in *)&sa))->sin_port);
+    conn->onMessage = parseRequest;
+    conn->clientAddr = inet_ntoa((((struct sockaddr_in *)&sa))->sin_addr);
+    conn->clientPort = ntohs((((struct sockaddr_in *)&sa))->sin_port);
 
-	ret = aeCreateFileEvent(eventLoop, cfd, AE_READABLE, connRead, conn);
-	if (ret == AE_ERR) {
-		perror("create read file event failed");
-	}
+    ret = aeCreateFileEvent(eventLoop, cfd, AE_READABLE, connRead, conn);
+    if (ret == AE_ERR) {
+        perror("create read file event failed");
+    }
 }
 
 void initServerConfig(void) {
-	server.pid = getpid();
-	server.fd = 0;
-	server.port = 8080;
-	server.tcp_backlog = 128;
-	server.configfile = NULL;
-	server.document_root = NULL;
-	server.el = NULL;
+    server.pid = getpid();
+    server.fd = 0;
+    server.port = 8080;
+    server.tcp_backlog = 128;
+    server.configfile = NULL;
+    server.document_root = NULL;
+    server.el = NULL;
 }
 
 void parseCommand(int argc, char *argv[]) {
@@ -166,11 +166,11 @@ int main(int argc, char *argv[]) {
 
     parseCommand(argc, argv);
 
-	initServer();
+    initServer();
 
-	aeCreateFileEvent(server.el, server.fd, AE_READABLE, acceptTcpHandler, NULL);
+    aeCreateFileEvent(server.el, server.fd, AE_READABLE, acceptTcpHandler, NULL);
 
-	aeMain(server.el);
+    aeMain(server.el);
 
-	return 0;
+    return 0;
 }
