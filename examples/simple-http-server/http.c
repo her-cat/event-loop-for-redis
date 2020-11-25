@@ -9,6 +9,10 @@ int httpCheck(connection *conn, char *buffer) {
 
     /* 没有 \r\n\r\n 说明 header 不完整。 */
     if ((crlfPos = strpos(buffer, HTTP_CRLF_CRLF)) < 0) {
+        /* 判断包长度是否超出限制。 */
+        if (strlen(buffer) >= HTTP_MAX_PACKAGE_LENGTH) {
+            connClose(conn, "HTTP/1.1 413 Request Entity Too Large\r\n\r\n", CONN_SEND_RAW);
+        }
         printf("need more header data\n");
         return 0;
     }
