@@ -64,31 +64,13 @@ int createWebServer(int port, int backlog) {
     return fd;
 }
 
-void sendResponseToClient(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
-    connection *conn = (connection *)clientData;
-
-    char buf[strlen(conn->sendBuffer)+40];
+void sendResponseToClient(connection *conn, char *buffer) {
+    char buf[strlen(buffer)+40];
     memset(buf, 0, strlen(buf));
-    sprintf(buf, "HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(conn->sendBuffer), conn->sendBuffer);
+    sprintf(buf, "HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(buffer), buffer);
 
     connSend(conn, buf, CONN_SEND_RAW);
     connDestroy(conn);
-}
-
-void parseRequest(connection *conn, char *buffer) {
-    request *req;
-
-    req = reqCreate(conn, buffer);
-    if (req == NULL) {
-        perror("create request failed");
-        connClose(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n", CONN_SEND_RAW);
-        return;
-    }
-
-    strcpy(conn->sendBuffer, buffer);
-    printf("parseRequest[%d]:\n%s\n", conn->fd, buffer);
-
-    aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE, sendResponseToClient, conn);
 }
 
 void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
@@ -110,7 +92,7 @@ void acceptTcpHandler(aeEventLoop *eventLoop, int fd, void *clientData, int mask
         return;
     }
 
-    conn->onMessage = parseRequest;
+    conn->onMessage = sendResponseToClient;
     conn->clientAddr = inet_ntoa((((struct sockaddr_in *)&sa))->sin_addr);
     conn->clientPort = ntohs((((struct sockaddr_in *)&sa))->sin_port);
 
