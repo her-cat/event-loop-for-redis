@@ -6,15 +6,13 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <netdb.h>
 #include "../../src/ae/ae.h"
 #include "until.h"
 
 #define URL_MAX_SIZE 1024
-#define URL_DEFAULT_PORT 80
-#define URL_DEFAULT_INTERVAL_TIME 10 * 1000
-#define URL_DEFAULT_RUNNING_TIME 10 * 1000
+#define URL_DEFAULT_INTERVAL_TIME (10 * 1000)
+#define URL_DEFAULT_RUNNING_TIME (10 * 1000)
 
 #define HTTP_DEFAULT_HEADER "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n"
 
@@ -197,7 +195,6 @@ int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
         return AE_NOMORE;
     }
 
-    /* TODO: use host */
     sprintf(header, HTTP_DEFAULT_HEADER, url->path, url->host);
 
     puts(header);
