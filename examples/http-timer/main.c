@@ -19,17 +19,135 @@
 #define HTTP_DEFAULT_HEADER "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n"
 
 enum URL_STATUS {
-    URL_STATUS_READY,
-    URL_STATUS_RUNNING,
+    READY,
+    RUNNING,
 };
 
+typedef enum URL_PARSE_STATUS {
+    SCHEME,
+    HOST,
+    PORT,
+    PATH
+} URL_PARSE_STATUS;
+
 typedef struct url_s {
-    char url[URL_MAX_SIZE];
+    int port;
+    int is_ssl;
+    char *host;
+    char *path;
+    char **ip_list;
     enum URL_STATUS status;
     struct timeval last_run_time;
 } url_t;
 
 static aeEventLoop *el;
+
+int url_parse(url_t *url, char *buf) {
+    char *pos = buf, *host_begin = NULL, *host_end = NULL,
+        *port_begin = NULL, *port_end = NULL, *path_begin = NULL;
+    enum URL_PARSE_STATUS status = SCHEME;
+
+    while (*pos) {
+        switch (status) {
+            case SCHEME:
+                if (strncasecmp("http://", pos, 7) == 0) {
+                    url->is_ssl = 0;
+                    status = HOST;
+                    pos += 7;
+                    continue;
+                } else if (strncasecmp("https://", pos, 8) == 0) {
+                    url->is_ssl = 1;
+                    status = HOST;
+                    pos += 8;
+                    continue;
+                } else {
+                    return -1;
+                }
+            case HOST:
+                if (host_begin == NULL)
+                    host_begin = pos;
+
+                if (pos[0] == ':') {
+                    status = PORT;
+                    host_end = pos;
+                    break;
+                }
+
+                if (pos[0] == '/' || pos[0] == '?') {
+                    status = PATH;
+                    host_end = pos;
+                    continue;
+                }
+                break;
+            case PORT:
+                if (port_begin == NULL)
+                    port_begin = pos;
+                if (pos[0] < '0' || pos[0] > '9') {
+                    status = PATH;
+                    port_end = pos;
+                    continue;
+                }
+                break;
+            case PATH:
+                if (path_begin == NULL)
+                    path_begin = pos;
+                break;
+            default:
+                return -1;
+        }
+        pos++;
+    }
+
+    if (host_end == NULL)
+        host_end = pos;
+    else if (port_begin != NULL && port_end == NULL)
+        port_end = pos;
+
+    url->host = calloc(1, host_end - host_begin);
+    memcpy(url->host, host_begin, host_end - host_begin);
+
+    if (path_begin != NULL && path_begin != pos) {
+        url->path = calloc(1, pos - path_begin);
+        memcpy(url->path, path_begin, pos - path_begin);
+    }
+
+    url->port = url->is_ssl ? 443 : 80;
+    if (port_begin != NULL && port_end != NULL) {
+        if (str2int(port_begin, port_end - port_begin, &url->port) < 0)
+            return -1;
+    }
+
+    return 1;
+}
+
+url_t *url_init(char *buf) {
+    url_t *url;
+    struct hostent *ent;
+
+    url = malloc(sizeof(url_t));
+    if (url == NULL)
+        goto err;
+
+    if (url_parse(url, buf) < 0)
+        goto err;
+
+    ent = gethostbyname(url->host);
+    if (ent == NULL)
+        goto err;
+
+    url->status = READY;
+    url->ip_list = ent->h_addr_list;
+
+    return url;
+
+err:
+    if (url) {
+        free(url->host);
+        free(url->path);
+        free(url);
+    }
+    return NULL;
+}
 
 static int make_socket_client(url_t *url) {
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -39,9 +157,8 @@ static int make_socket_client(url_t *url) {
     struct sockaddr_in server_addr;
     bzero(&server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(URL_DEFAULT_PORT);
-    /* TODO: use host */
-    inet_pton(AF_INET, url->url, &server_addr.sin_addr);
+    server_addr.sin_port = htons(url->port);
+    server_addr.sin_addr = *(struct in_addr *)url->ip_list[0];
 
     socklen_t server_len = sizeof(server_addr);
     int connect_rt = connect(socket_fd, (struct sockaddr *) &server_addr,server_len);
@@ -58,21 +175,21 @@ void fileProc(aeEventLoop *eventLoop, int fd, void *clientData, int mask) {
 
     printf("received: %s, file proc executed.\n", buf);
 
-    url->status = URL_STATUS_READY;
+    url->status = READY;
     aeDeleteFileEvent(eventLoop, fd, AE_READABLE | AE_WRITABLE);
 }
 
 int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
     int socket_fd, ret;
     url_t *url = clientData;
-    char header[strlen(url->url) + 60];
+    char header[strlen(url->path) + strlen(url->host) + 60];
 
-    if (url->status == URL_STATUS_RUNNING) {
-        printf("url: %s is running.\n", url->url);
+    if (url->status == RUNNING) {
+        printf("timer_id: %lld, running.\n", id);
         return URL_DEFAULT_RUNNING_TIME;
     }
 
-    url->status = URL_STATUS_RUNNING;
+    url->status = RUNNING;
 
     socket_fd = make_socket_client(url);
     if (socket_fd < 0) {
@@ -81,7 +198,7 @@ int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* TODO: use host */
-    sprintf(header, HTTP_DEFAULT_HEADER, "/", url->url);
+    sprintf(header, HTTP_DEFAULT_HEADER, url->path, url->host);
 
     puts(header);
 
@@ -103,7 +220,7 @@ int timeProc(aeEventLoop *eventLoop, long long id, void *clientData) {
     return 10 * 1000;
 
     err:
-    url->status = URL_STATUS_READY;
+    url->status = READY;
     return URL_DEFAULT_INTERVAL_TIME;
 }
 
@@ -124,10 +241,11 @@ int main(void) {
         if (strlen(buf) == 0)
             continue;
 
-        url_t *url = malloc(sizeof(url_t));
-        /* TODO: check url */
-        strncpy(url->url, buf, strlen(buf));
-        url->status = URL_STATUS_READY;
+        url_t *url = url_init(buf);
+        if (url == NULL) {
+            printf("init url: %s failed", buf);
+            continue;
+        }
 
         aeCreateTimeEvent(el, 1 * 1000, timeProc, (void *) url, NULL);
     }

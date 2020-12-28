@@ -1,6 +1,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <stdlib.h>
 
 int strpos(const char *haystack, const char *needle) {
     if (strlen(needle) == 0) return 0;
@@ -77,4 +78,30 @@ int str2int(const char *s, size_t slen, int *value) {
     if (value != NULL) *value = v;
 
     return 1;
+}
+
+char *substr(char *str, char *begin, char *end) {
+    long long len;
+    unsigned long long blen;
+    char *ret = NULL, *bpos, *epos;
+
+    if ((blen = strlen(begin)) <= 0 || strlen(end) <= 0)
+        return ret;
+
+    bpos = strstr(str, begin);
+    if (bpos == NULL)
+        return ret;
+
+    epos = strstr(bpos + blen, end);
+    if (epos == NULL)
+        return ret;
+
+    len = epos - bpos;
+    if (len <= 0)
+        return ret;
+
+    ret = calloc(1, len);
+    memcpy(ret, bpos + strlen(begin), len - blen);
+
+    return ret;
 }

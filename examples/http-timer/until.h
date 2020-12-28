@@ -8,5 +8,6 @@ void ltrim(char *s);
 void rtrim(char *s);
 void trim(char *s);
 int str2int(const char *s, size_t len, int *val);
+char *substr(char *str, char *begin, char *end);
 
 #endif

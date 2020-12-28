@@ -1,2 +1,2 @@
-http://s.her-cat.com
-http://her-cat.com
+http://s.her-cat.com/
+http://her-cat.com/
